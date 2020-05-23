@@ -35,6 +35,7 @@ namespace FoundationDB.Client.Native
 	using System.Collections.Generic;
 	using System.Diagnostics;
 	using System.IO;
+	using System.Reflection;
 	using System.Runtime.ExceptionServices;
 	using System.Runtime.InteropServices;
 	using System.Text;
@@ -45,105 +46,136 @@ namespace FoundationDB.Client.Native
 		public const int FDB_API_MIN_VERSION = 200;
 		public const int FDB_API_MAX_VERSION = 620;
 
-#if __MonoCS__
-		/// <summary>Name of the C API dll used for P/Invoking</summary>
-		private const string FDB_C_DLL = "libfdb_c.so";
-#else
-		/// <summary>Name of the C API dll used for P/Invoking</summary>
-		private const string FDB_C_DLL = "fdb_c";
-#endif
+// #if __MonoCS__
+// 		/// <summary>Name of the C API dll used for P/Invoking</summary>
+// 		private const string FDB_C_DLL = "libfdb_c.so";
+// #else
+// 		/// <summary>Name of the C API dll used for P/Invoking</summary>
+// 		private const string FDB_C_DLL = "fdb_c";
+// #endif
 
 		/// <summary>Handle on the native FDB C API library</summary>
-		private static readonly UnmanagedLibrary? FdbCLib;
+		// private static readonly UnmanagedLibrary? FdbCLib;
 
 		/// <summary>Exception that was thrown when we last tried to load the native FDB C library (or null if nothing wrong happened)</summary>
-		private static readonly ExceptionDispatchInfo? LibraryLoadError;
+		// private static readonly ExceptionDispatchInfo? LibraryLoadError;
 
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-		public delegate void FdbFutureCallback(IntPtr future, IntPtr parameter);
+		 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+		 public delegate void FdbFutureCallback(IntPtr future, IntPtr parameter);
 
 		/// <summary>Contain all the stubs to the methods exposed by the C API library</summary>
 		[System.Security.SuppressUnmanagedCodeSecurity]
 		internal static class NativeMethods
 		{
-
+			private const string LibraryName = "fdb_c";
+			static NativeMethods()
+			{
+				NativeLibrary.SetDllImportResolver(typeof(NativeMethods).Assembly, ImportResolver);
+			}
+			private static IntPtr ImportResolver(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+			{
+				IntPtr libHandle = IntPtr.Zero;
+				if (libraryName == NativeMethods.LibraryName)
+				{
+					string library;
+					if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+					{
+						library = "libfdb_c.so";	
+					} 
+					else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+					{
+						library = "libfdb_c.dylib";
+					}
+					else
+					{
+						library = "libfdb_c.dll";
+					}
+					var libraryLoaded = NativeLibrary.TryLoad(library, assembly, DllImportSearchPath.AssemblyDirectory, out libHandle);
+					if (!libraryLoaded)
+					{
+						throw new Exception($"Unable to Load Library: {library}");
+					}
+				}
+				return libHandle;
+			}
+			
 			// Core
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_select_api_version_impl(int runtimeVersion, int headerVersion);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern int fdb_get_max_api_version();
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern IntPtr fdb_get_error(FdbError code);
 
 			// Network
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_network_set_option(FdbNetworkOption option, byte* value, int valueLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_setup_network();
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_run_network();
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_stop_network();
 
 			// Cluster
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
 			public static extern FutureHandle fdb_create_cluster([MarshalAs(UnmanagedType.LPStr)] string? clusterFilePath);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_cluster_destroy(IntPtr cluster);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_cluster_set_option(ClusterHandle cluster, FdbClusterOption option, byte* value, int valueLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
 			public static extern FutureHandle fdb_cluster_create_database(ClusterHandle cluster, [MarshalAs(UnmanagedType.LPStr)] string dbName, int dbNameLength);
 
 			// Database
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
 			public static extern FdbError fdb_create_database([MarshalAs(UnmanagedType.LPStr)] string? clusterFilePath, out DatabaseHandle database);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_database_destroy(IntPtr database);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_database_set_option(DatabaseHandle handle, FdbDatabaseOption option, byte* value, int valueLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_database_create_transaction(DatabaseHandle database, out TransactionHandle transaction);
 
 			// Transaction
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_transaction_destroy(IntPtr database);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_transaction_set_option(TransactionHandle handle, FdbTransactionOption option, byte* value, int valueLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_transaction_set_read_version(TransactionHandle handle, long version);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_get_read_version(TransactionHandle transaction);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_get(TransactionHandle transaction, byte* keyName, int keyNameLength, bool snapshot);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_get_addresses_for_key(TransactionHandle transaction, byte* keyName, int keyNameLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_get_key(TransactionHandle transaction, byte* keyName, int keyNameLength, bool orEqual, int offset, bool snapshot);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_get_range(
 				TransactionHandle transaction,
 				byte* beginKeyName, int beginKeyNameLength, bool beginOrEqual, int beginOffset,
@@ -151,172 +183,173 @@ namespace FoundationDB.Client.Native
 				int limit, int targetBytes, FdbStreamingMode mode, int iteration, bool snapshot, bool reverse
 			);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_transaction_set(TransactionHandle transaction, byte* keyName, int keyNameLength, byte* value, int valueLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_transaction_clear(TransactionHandle transaction, byte* keyName, int keyNameLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_transaction_clear_range(
 				TransactionHandle transaction,
 				byte* beginKeyName, int beginKeyNameLength,
 				byte* endKeyName, int endKeyNameLength
 			);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_transaction_atomic_op(TransactionHandle transaction, byte* keyName, int keyNameLength, byte* param, int paramLength, FdbMutationType operationType);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_commit(TransactionHandle transaction);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_transaction_get_committed_version(TransactionHandle transaction, out long version);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_get_versionstamp(TransactionHandle transaction);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_watch(TransactionHandle transaction, byte* keyName, int keyNameLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_on_error(TransactionHandle transaction, FdbError error);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_transaction_reset(TransactionHandle transaction);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_transaction_cancel(TransactionHandle transaction);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_transaction_add_conflict_range(TransactionHandle transaction, byte* beginKeyName, int beginKeyNameLength, byte* endKeyName, int endKeyNameLength, FdbConflictRangeType type);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FutureHandle fdb_transaction_get_approximate_size(TransactionHandle transaction);
 
 			// Future
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_future_destroy(IntPtr future);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_future_cancel(FutureHandle future);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern void fdb_future_release_memory(FutureHandle future);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_block_until_ready(FutureHandle futureHandle);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern bool fdb_future_is_ready(FutureHandle futureHandle);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_get_error(FutureHandle futureHandle);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_set_callback(FutureHandle future, FdbFutureCallback callback, IntPtr callbackParameter);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_get_version(FutureHandle future, out long version);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_get_int64(FutureHandle future, out long version);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_get_key(FutureHandle future, out byte* key, out int keyLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_get_cluster(FutureHandle future, out ClusterHandle cluster);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_get_database(FutureHandle future, out DatabaseHandle database);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_get_value(FutureHandle future, out bool present, out byte* value, out int valueLength);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_get_string_array(FutureHandle future, out byte** strings, out int count);
 
-			[DllImport(FDB_C_DLL, CallingConvention = CallingConvention.Cdecl)]
+			[DllImport(NativeMethods.LibraryName, CallingConvention = CallingConvention.Cdecl)]
 			public static extern FdbError fdb_future_get_keyvalue_array(FutureHandle future, out FdbKeyValue* kv, out int count, out bool more);
 
 		}
 
 		static FdbNative()
 		{
-			var libraryPath = GetPreloadPath();
-
-			if (libraryPath == null)
-			{ // PInvoke will load
-				return;
-			}
-
-			try
-			{
-				FdbCLib = UnmanagedLibrary.Load(libraryPath);
-			}
-			catch (Exception e)
-			{
-				FdbCLib?.Dispose();
-				FdbCLib = null;
-				if (e is BadImageFormatException && IntPtr.Size == 4)
-				{
-					e = new InvalidOperationException("The native FDB client is 64-bit only, and cannot be loaded in a 32-bit process.", e);
-				}
-				else
-				{
-					e = new InvalidOperationException($"An error occurred while loading the native FoundationDB library: '{libraryPath}'.", e);
-				}
-				LibraryLoadError = ExceptionDispatchInfo.Capture(e);
-			}
-			
+			// var libraryPath = @"C:\Program Files\foundationdb\bin\fdb_c.dll";
+			// //var libraryPath = GetPreloadPath();
+			//
+			// if (libraryPath == null)
+			// { // PInvoke will load
+			// 	return;
+			// }
+			//
+			// try
+			// {
+			// 	FdbCLib = UnmanagedLibrary.Load(libraryPath);
+			// }
+			// catch (Exception e)
+			// {
+			// 	FdbCLib?.Dispose();
+			// 	FdbCLib = null;
+			// 	if (e is BadImageFormatException && IntPtr.Size == 4)
+			// 	{
+			// 		e = new InvalidOperationException("The native FDB client is 64-bit only, and cannot be loaded in a 32-bit process.", e);
+			// 	}
+			// 	else
+			// 	{
+			// 		e = new InvalidOperationException($"An error occurred while loading the native FoundationDB library: '{libraryPath}'.", e);
+			// 	}
+			// 	LibraryLoadError = ExceptionDispatchInfo.Capture(e);
+			// }
+			//
 		}
 
-		private static string? GetPreloadPath()
-		{
-			// we need to provide sensible defaults for loading the native library
-			// if this method returns null we'll let PInvoke deal
-			// otherwise - use explicit platform-specific dll loading
-			var libraryPath = Fdb.Options.NativeLibPath;
-
-			// on non-windows, library loading by convention just works.
-			// unless override is provided, just let PInvoke do the work
-			if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-			{
-				if (string.IsNullOrEmpty(libraryPath))
-				{
-					return null;
-				}
-				// otherwise just use the provided path
-				return libraryPath;
-			}
-
-			// Impact of NativeLibPath on windows:
-			// - If null, don't preload the library, and let the CLR find the file using the default P/Invoke behavior
-			// - If String.Empty, call win32 LoadLibrary(FDB_C_DLL + ".dll") and let the os find the file (using the standard OS behavior)
-			// - If path is folder, append the FDB_C_DLL
-			var winDllWithExtension = FDB_C_DLL + ".dll";
-			if (libraryPath == null)
-			{
-				return null;
-			}
-			if (libraryPath.Length == 0)
-			{
-				return winDllWithExtension;
-			}
-			var fileName = Path.GetFileName(libraryPath);
-			if (String.IsNullOrEmpty(fileName))
-			{
-				libraryPath = Path.Combine(libraryPath, winDllWithExtension);
-			}
-			return libraryPath;
-		}
+		// private static string? GetPreloadPath()
+		// {
+		// 	// we need to provide sensible defaults for loading the native library
+		// 	// if this method returns null we'll let PInvoke deal
+		// 	// otherwise - use explicit platform-specific dll loading
+		// 	var libraryPath = Fdb.Options.NativeLibPath;
+		//
+		// 	// on non-windows, library loading by convention just works.
+		// 	// unless override is provided, just let PInvoke do the work
+		// 	if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+		// 	{
+		// 		if (string.IsNullOrEmpty(libraryPath))
+		// 		{
+		// 			return null;
+		// 		}
+		// 		// otherwise just use the provided path
+		// 		return libraryPath;
+		// 	}
+		//
+		// 	// Impact of NativeLibPath on windows:
+		// 	// - If null, don't preload the library, and let the CLR find the file using the default P/Invoke behavior
+		// 	// - If String.Empty, call win32 LoadLibrary(FDB_C_DLL + ".dll") and let the os find the file (using the standard OS behavior)
+		// 	// - If path is folder, append the FDB_C_DLL
+		// 	var winDllWithExtension = FDB_C_DLL + ".dll";
+		// 	if (libraryPath == null)
+		// 	{
+		// 		return null;
+		// 	}
+		// 	if (libraryPath.Length == 0)
+		// 	{
+		// 		return winDllWithExtension;
+		// 	}
+		// 	var fileName = Path.GetFileName(libraryPath);
+		// 	if (String.IsNullOrEmpty(fileName))
+		// 	{
+		// 		libraryPath = Path.Combine(libraryPath, winDllWithExtension);
+		// 	}
+		// 	return libraryPath;
+		// }
 
 		private static void EnsureLibraryIsLoaded()
 		{
 			// should be inlined
-			FdbNative.LibraryLoadError?.Throw();
+			//FdbNative.LibraryLoadError?.Throw();
 		}
 
 		private static string? ToManagedString(byte* nativeString)

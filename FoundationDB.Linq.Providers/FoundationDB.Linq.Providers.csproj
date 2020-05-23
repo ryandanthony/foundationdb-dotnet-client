@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netstandard2.1;net472</TargetFrameworks>
     <RootNamespace>FoundationDB.Linq.Providers</RootNamespace>
     <AssemblyName>FoundationDB.Linq.Providers</AssemblyName>
     <LangVersion>8.0</LangVersion>
@@ -10,6 +9,7 @@
     <AssemblyOriginatorKeyFile>..\Common\foundationdb-net-client.snk</AssemblyOriginatorKeyFile>
     <PackageTags>foundationdb fdb nosql</PackageTags>
     <Description>Experimental LINQ providers for the FoundationDB .NET Binding</Description>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
 
   <Import Project="..\Common\VersionInfo.props" />

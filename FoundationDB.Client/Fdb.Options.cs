@@ -44,7 +44,8 @@ namespace FoundationDB.Client
 
 			#region Native Library Preloading...
 
-			/// <summary>Custom path from where to load the native C API library. If null, let the CLR find the dll. If String.Empty let Win32's LoadLibrary find the correct dll, else use the specified path to load the library</summary>
+			/// <summary>Custom path from where to load the native C API library. If null, let the CLR find the dll.
+			/// If String.Empty let Win32's LoadLibrary find the correct dll, else use the specified path to load the library</summary>
 			//REVIEW: change this into a get-only, and force people to call SetNativeLibPath(..)?
 			public static string? NativeLibPath = string.Empty;
 
